@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Houses the forms used in the Islanora XACML Editor.
+ * Houses the forms used in the Islandora XACML Editor.
  */
 
 /**
@@ -58,6 +58,18 @@ function islandora_xacml_editor_form($form, &$form_state, $object) {
     // Some basic error handling.
     try {
       $xacml = new Xacml($object['POLICY']->content);
+
+      if ($xacml->managementRule->isPopulated() && !$xacml->managementRule->validateDefaultMethods()) {
+        drupal_set_message(t('The management XACML policy is not valid.'), 'error');
+      }
+
+      if ($xacml->viewingRule->isPopulated() && !$xacml->viewingRule->validateDefaultMethods()) {
+        drupal_set_message(t('The viewing XACML policy is not valid.'), 'error');
+      }
+
+      if ($xacml->datastreamRule->isPopulated() && !$xacml->datastreamRule->validateDefaultMethods()) {
+        drupal_set_message(t('The datastream XACML policy is not valid.'), 'error');
+      }
     }
     catch (XacmlException $e) {
       watchdog('islandora_xacml_editor', 'Exception in Islandora Xacml: @message', array('@message', $e->getMessage()), array(), WATCHDOG_ERROR);
@@ -193,12 +205,20 @@ function islandora_xacml_editor_form($form, &$form_state, $object) {
     $temp = module_invoke_all($hook, $object);
     if (!empty($temp)) {
       $query_choices = array_merge_recursive($query_choices, $temp);
+      // We are doing this to handle the "flat" use case where we are not
+      // recursing more than one level. This is a unique case so this is the
+      // easiest way to handle it.
+      if (isset($query_choices['all_children'])) {
+        $query_choices['flat_collection'] = $query_choices['all_children'];
+        $query_choices['flat_collection']['description'] = t('All immediate children of the collection (shallow traversal)');
+        $query_choices['flat_collection']['restricted_cmodels'] = array('islandora:collectionCModel');
+      }
     }
   }
 
   if (!empty($query_choices)) {
     // The "newchildren" option is applied automatically through ingest steps.
-    $update_options = array('newchildren' => t('New children of this collection.'));
+    $update_options = array('newchildren' => t('New children of this object.'));
     foreach ($query_choices as $key => $query) {
       $form_state['islandora_xacml']['query_choices'][$key] = $query;
       $update_options[$key] = $query['description'];
@@ -214,7 +234,6 @@ function islandora_xacml_editor_form($form, &$form_state, $object) {
       $form['update_options']['#value'] = $form_state['islandora_xacml']['child_option'];
     }
   }
-
   $form['dsid_mime']['users'] = array(
     '#type' => 'select',
     '#title' => t('Users'),
@@ -767,6 +786,7 @@ function islandora_xacml_editor_form($form, &$form_state, $object) {
     $form['dsid_mime']['dsid_regex'] = array(
       '#type' => 'textfield',
       '#title' => t('DSID Regex'),
+      '#description' => l(t('XML regex'), 'http://www.w3.org/TR/xmlschema-0/#regexAppendix'),
       '#size' => 35,
       '#prefix' => '<div class="islandora_xacml_block">',
       '#name' => 'dsid_regex_add_textfield',
@@ -820,6 +840,7 @@ function islandora_xacml_editor_form($form, &$form_state, $object) {
     $form['dsid_mime']['mime_regex'] = array(
       '#type' => 'textfield',
       '#title' => t('MIME type Regex'),
+      '#description' => l(t('XML regex'), 'http://www.w3.org/TR/xmlschema-0/#regexAppendix'),
       '#size' => 35,
       '#prefix' => '<div class="islandora_xacml_block">',
       '#name' => 'mime_regex_add_textfield',
